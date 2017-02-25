@@ -10,6 +10,27 @@ MODULE_DESCRIPTION("Lab 2 pipe module");
 MODULE_AUTHOR("M. Kofman");
 
 #define DEVICE_NAME "MAIpipe"
+#define ROOT_UID 0
+
+static kuid_t rootUid =
+{
+	.val = ROOT_UID
+};
+
+struct ring_buf {
+	kuid_t uid;
+	unsigned char *buf;
+	int start;
+	int end;
+};
+
+int getbuf_byid(struct ring_buf *buf, int nbuf, kuid_t byuid) {
+	int i=0;
+	for(; i<nbuf; i++)
+		if(uid_eq(buf[i].uid, byuid))
+			return i;
+	return -1;
+}
 
 static int buf_size = 0;
 module_param(buf_size, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
@@ -21,8 +42,8 @@ static ssize_t pipe_read(struct file *, char *, size_t, loff_t *);
 static ssize_t pipe_write(struct file *, const char *, size_t, loff_t *);
 
 static int major;
-static char *buf;
-int buf_cur=0;
+struct ring_buf *pipe_buf;
+int num_of_bufs=0;
 
 static struct file_operations fops =
 {
@@ -33,13 +54,6 @@ static struct file_operations fops =
 };
 
 static int __init pipe_init(void) {
-	buf = kmalloc(buf_size, GFP_KERNEL);
-	if(!buf) {
-		pr_alert("Initialising buffer failed with %d size",buf_size);
-		return -1;
-	}
-	pr_warning("Initialising buffer with %d size\n",buf_size);
-	
 	major = register_chrdev(0, DEVICE_NAME, &fops);
 	if(major < 0) {
 		pr_alert("Registering the character device failed with %d\n", major);
@@ -59,6 +73,33 @@ static void __exit pipe_exit(void) {
 module_init(pipe_init);
 module_exit(pipe_exit);
 
-static int pipe_open(struct inode *inode, struct file *file) {
-	
+static int pipe_open(struct inode *i, struct file *f) {
+	num_of_bufs++;
+	krealloc(pipe_buf, num_of_bufs*sizeof(*pipe_buf), GFP_KERNEL); //allocate memory for new ring buf
+	pipe_buf[num_of_bufs-1].buf = kmalloc(buf_size, GFP_KERNEL); //alocate memory for buf inside of ring buf
+	if(!pipe_buf[num_of_bufs-1].buf) {
+		pr_alert("Initialising buffer failed with %d size",buf_size);
+		return -1;
+	}
+	pr_warning("Initialising buffer with %d size\n",buf_size);
+	pipe_buf[num_of_bufs-1].uid = get_current_user()->uid;
+	pipe_buf[num_of_bufs-1].start=0; pipe_buf[num_of_bufs-1].end=0;
+	return 0;
+}
+
+static int pipe_release(struct inode *i, struct file *f) {
+	kfree(pipe_buf[getbuf_byid(pipe_buf,num_of_bufs,get_current_user()->uid)].buf);
+	//kfree(pipe_buf[getbuf_byid(pipe_buf,num_of_bufs,geteuid())]);
+	num_of_bufs--;
+	return 1;
+}
+
+static ssize_t pipe_read(struct file *f, char *c, size_t s, loff_t *l) {
+	pr_alert("Procedure is not realised yet!\n");
+	return -1;
+}
+
+static ssize_t pipe_write(struct file *f, const char *c, size_t s, loff_t *l) {
+	pr_alert("Procedure is not realised yet!\n");
+	return -1;
 }
