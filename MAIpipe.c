@@ -32,7 +32,7 @@ int getbuf_byid(struct ring_buf *buf, int nbuf, kuid_t byuid) {
 	return -1;
 }
 
-static int buf_size = 0;
+static int buf_size = 16;
 module_param(buf_size, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 MODULE_PARM_DESC(buf_size, "Size of buffer");
 
@@ -61,21 +61,25 @@ static int __init pipe_init(void) {
 	}
 	pr_warning("MAIpipe module is loaded\n");
 
-	pr_warning("You should create dev file with 'mknod /dev/MAIpipe c %d0'\n", major);
+	pr_warning("You should create dev file with 'mknod -m 777 /dev/MAIpipe c %d 0'\n", major);
 	return 0;
 }
 
 static void __exit pipe_exit(void) {
 	unregister_chrdev(major, DEVICE_NAME);
-	pr_alert("MAIpipe module is unloaded\n");
+	pr_warning("MAIpipe module is unloaded\n");
 }
 
 module_init(pipe_init);
 module_exit(pipe_exit);
 
 static int pipe_open(struct inode *i, struct file *f) {
-	num_of_bufs++;
+	num_of_bufs++;/*
 	krealloc(pipe_buf, num_of_bufs*sizeof(*pipe_buf), GFP_KERNEL); //allocate memory for new ring buf
+	if(!pipe_buf) {
+		pr_alert("Initialising ring buffer failed at #%d call",num_of_bufs);
+		return -1;		
+	}
 	pipe_buf[num_of_bufs-1].buf = kmalloc(buf_size, GFP_KERNEL); //alocate memory for buf inside of ring buf
 	if(!pipe_buf[num_of_bufs-1].buf) {
 		pr_alert("Initialising buffer failed with %d size",buf_size);
@@ -83,12 +87,18 @@ static int pipe_open(struct inode *i, struct file *f) {
 	}
 	pr_warning("Initialising buffer with %d size\n",buf_size);
 	pipe_buf[num_of_bufs-1].uid = get_current_user()->uid;
-	pipe_buf[num_of_bufs-1].start=0; pipe_buf[num_of_bufs-1].end=0;
+	pipe_buf[num_of_bufs-1].start=0; pipe_buf[num_of_bufs-1].end=0;*/
+	pipe_buf = kmalloc(sizeof(struct ring_buf), GFP_KERNEL);
+	if(!pipe_buf) {
+		pr_alert("Initialising ring buffer failed at #%d call",num_of_bufs);
+		return -1;		
+	}
 	return 0;
 }
 
 static int pipe_release(struct inode *i, struct file *f) {
-	kfree(pipe_buf[getbuf_byid(pipe_buf,num_of_bufs,get_current_user()->uid)].buf);
+	kfree(pipe_buf);
+	//kfree(pipe_buf[getbuf_byid(pipe_buf,num_of_bufs,get_current_user()->uid)].buf);
 	//kfree(pipe_buf[getbuf_byid(pipe_buf,num_of_bufs,geteuid())]);
 	num_of_bufs--;
 	return 1;
